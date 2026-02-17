@@ -73,7 +73,6 @@ docker build -t api3-201504070:latest ./api3
 docker tag api1-201504070:latest localhost:5000/api1-201504070:latest
 docker push localhost:5000/api1-201504070:latest
 # (Repetir para api2 y api3)
-
 ```
 
 ### 2. Ejecución en Nodos (VM1 y VM2)
@@ -84,7 +83,6 @@ En los nodos de ejecución, se utiliza `ctr` para descargar y correr las imágen
 # Ejemplo en VM1
 sudo ctr image pull --plain-http 192.168.122.103:5000/api1-201504070:latest
 sudo ctr run -d --net-host 192.168.122.103:5000/api1-201504070:latest api1
-
 ```
 
 ## 📡 Uso de APIs
@@ -101,13 +99,6 @@ Cada API expone un endpoint `/health` para monitoreo:
 
 ```bash
 curl [http://192.168.122.101:8080/health](http://192.168.122.101:8080/health)
-
 ```
 
 ---
-
-**Curso:** Sistemas Operativos 1 - USAC
-
-```
-
-```
