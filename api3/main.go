@@ -23,12 +23,14 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+//api 1 esta en la dirección: http://192.168.122.101:8080/
 func callAPI1Handler(w http.ResponseWriter, r *http.Request) {
 	callAPI(w, "API1", "http://192.168.122.101:8080/health")
 }
 
+//api 2 esta en la dirección http://192.168.122.101:8081/
 func callAPI2Handler(w http.ResponseWriter, r *http.Request) {
-	callAPI(w, "API2", "http://192.168.122.101:8080/health")
+	callAPI(w, "API2", "http://192.168.122.101:8081/health")
 }
 
 func callAPI(w http.ResponseWriter, apiName string, url string) {
