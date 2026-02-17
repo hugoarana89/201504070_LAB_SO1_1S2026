@@ -8,5 +8,5 @@ RUN go build -o api2
 FROM alpine:latest
 WORKDIR /root/
 COPY --from=builder /app/api2 .
-EXPOSE 8080
+EXPOSE 8081
 CMD ["./api2"]

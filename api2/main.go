@@ -72,7 +72,7 @@ func main() {
 	http.HandleFunc(fmt.Sprintf("/api2/%s/call-api1", CARNET), callAPI1Handler)
 	http.HandleFunc(fmt.Sprintf("/api2/%s/call-api3", CARNET), callAPI3Handler)
 
-	fmt.Println("API2 listening on :8080")
-	http.ListenAndServe(":8080", nil)
+	fmt.Println("API2 listening on :8081")
+	http.ListenAndServe(":8081", nil)
 }
 
