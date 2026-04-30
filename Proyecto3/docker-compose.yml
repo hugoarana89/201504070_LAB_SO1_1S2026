@@ -1,0 +1,80 @@
+version: '3.8'
+services:
+  rust-api:
+    build: ./rust-api
+    ports:
+      - "8080:8080"
+    environment:
+      - GO_SERVICE_URL=http://go-service:8081
+      - RUST_LOG=info
+    restart: on-failure
+    depends_on:
+      - go-service
+
+  go-service:
+    build: ./go-service
+    ports:
+      - "8081:8081"
+    environment:
+      - GRPC_SERVER_URL=grpc-server:50051
+    restart: on-failure
+    depends_on:
+      - grpc-server
+
+  grpc-server:
+    build: ./grpc-server
+    ports:
+      - "50051:50051"
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - QUEUE_NAME=war_reports
+      - GRPC_PORT=50051
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+
+  consumer:
+    build: ./consumer
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - QUEUE_NAME=war_reports
+      - VALKEY_ADDR=valkey:6379
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+      - valkey
+
+  valkey:
+    image: valkey/valkey:7.2
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+
+  grafana:
+    build: ./grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=sopes1
+      - GF_SECURITY_ADMIN_PASSWORD=|/hR9S6£/3=(
+      - GF_INSTALL_PLUGINS=redis-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources/datasource.yaml:/etc/grafana/provisioning/datasources/datasource.yaml:ro
+      - ./grafana/provisioning/dashboards/dashboard_config.yaml:/etc/grafana/provisioning/dashboards/dashboard_config.yaml:ro
+      - ./grafana/provisioning/dashboards/sopes-dashboard.json:/etc/grafana/provisioning/dashboards/sopes-dashboard.json:ro
+    restart: on-failure
+    depends_on:
+      - valkey
+
+volumes:
+  cargo-cache:
+  grafana_data:

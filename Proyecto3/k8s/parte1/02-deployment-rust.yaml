@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rust-api-deploy
+  namespace: mumnk8s
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rust-api
+  template:
+    metadata:
+      labels:
+        app: rust-api
+    spec:
+      containers:
+        - name: rust-api
+          # Cambio: Se usa el dominio de ngrok sin puerto y sin protocolo
+          image: curtly-duress-exciting.ngrok-free.dev/rust-api:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: GO_SERVICE_URL
+              value: "http://go-service-svc.mumnk8s.svc.cluster.local:8081"
+            - name: RUST_LOG
+              value: "info"
+          resources:
+            requests:
+              cpu: "100m" # originalmente estaba en 10m, pero para un arranque más fluido y considerando que Rust puede necesitar un poco más, lo subí a 50m
+              memory: "128Mi" # Rust es ligero, esto está bien para empezar
+            limits:
+              cpu: "500m" # originalmente estaba en 200m, pero para permitir que procese rápido si hay carga, lo subí a 500m
+              memory: "256Mi" # originalmente estaba en 128Mi, pero para evitar el OOMKilled si el binario crece, lo subí a 256Mi
