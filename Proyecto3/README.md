@@ -545,6 +545,119 @@ Get http://34.117.67.81/
 
 ---
 
+## Levantar el go service
+
+Ir a la carpeta:
+
+```bash
+cd 201504070_LAB_SO1_1S2026/Proyecto3/k8s/parte2
+```
+
+```bash
+kubectl apply -f .
+```
+
+O aplicar de forma individualo loa archivo yaml.
+
+```bash
+kubectl apply -f 07-deployment-go.yaml
+kubectl apply -f 08-service-go.yaml
+```
+
+<div align="center">
+  <img src="img/23.jpg" alt="" width="100%">
+</div>
+
+## Comandos útiles para ver el pod
+
+### Ver pods
+
+```bash
+kubectl get pods -n mumnk8s
+```
+
+---
+
+### Ver logs en tiempo real
+
+```bash
+kubectl logs -f rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+```
+
+---
+
+### Describir el pod (MUY recomendado ahora)
+
+```bash
+kubectl describe pod rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+```
+
+> Como no se ha levantado grpc server saldra un error pero se soluciona al levantar los servicios que hacen falta
+
+---
+
+## Levantar grpc server y rabbitmq
+
+Esto a diferencia de lo anterior se debe levantar manualmente
+
+### 1. Primero RabbitMQ (grpc-server lo necesita)
+
+```bash
+kubectl apply -f 10-deployment-rabbitmq.yaml
+kubectl apply -f 11-service-rabbitmq.yaml
+```
+
+### Espera que RabbitMQ esté Ready antes de continuar
+
+```bash
+kubectl get pods -n mumnk8s -w   # Ctrl+C cuando se vea 1/1 Running
+```
+
+### 2. Luego grpc-server
+
+```bash
+kubectl apply -f 12-deployment-grpc-server.yaml
+kubectl apply -f 13-service-grpc-server.yaml
+```
+
+## kubectl rollout restart deployment/go-deploy -n mumnk8s
+
+Después de levantar grpc-server el pod de go-service se leventará automáticamente solo hay que esperar alrededor de 7 minutos. Si el contenedor no se reinicía enteonces aplicar el comando:
+
+```bash
+kubectl rollout restart deployment/go-deploy -n mumnk8s
+```
+---
+
+## Comandos útiles para ver los pods
+
+### Ver pods
+
+```bash
+kubectl get pods -n mumnk8s
+```
+
+---
+
+### Ver logs en tiempo real
+
+```bash
+kubectl logs -f rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+```
+
+---
+
+### Describir el pod (MUY recomendado ahora)
+
+```bash
+kubectl describe pod rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+```
+
+<div align="center">
+  <img src="img/24.jpg" alt="" width="100%">
+</div>
+
+---
 
 
 
@@ -553,6 +666,112 @@ Get http://34.117.67.81/
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Ya estás muy cerca — el problema es sencillo pero clásico 👀
+
+👉 Tu pod **NO está en el namespace `default`**, está en:
+
+```
+mumnk8s
+```
+
+Por eso Kubernetes te dice `NotFound`.
+
+---
+
+## ✅ Solución correcta
+
+Debes especificar el namespace con `-n`:
+
+```bash
+kubectl logs rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+```
+
+---
+
+## 🧠 Por qué pasa esto
+
+Cuando ejecutas:
+
+```bash
+kubectl logs <pod>
+```
+
+Kubernetes asume:
+
+```
+namespace = default
+```
+
+Pero tu pod está en:
+
+```
+mumnk8s
+```
+
+---
+
+## 🔥 Comandos útiles para evitar este problema
+
+### Ver pods SOLO de ese namespace
+
+```bash
+kubectl get pods -n mumnk8s
+```
+
+---
+
+### Ver logs en tiempo real
+
+```bash
+kubectl logs -f rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+```
+
+---
+
+### Describir el pod (MUY recomendado ahora)
+
+```bash
+kubectl describe pod rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+```
+
+---
+
+### (Opcional) Cambiar namespace por defecto
+
+Así ya no tienes que poner `-n` siempre:
+
+```bash
+kubectl config set-context --current --namespace=mumnk8s
+```
+
+---
+
+## 🚨 Siguiente paso
+
+Ejecuta:
+
+```bash
+kubectl logs rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+```
+
+Y pégame el resultado.
+Ahí ya vamos a ver **por qué tu app “no funciona” realmente** 👍
 
 
 
@@ -725,3 +944,61 @@ curl -v http://34.117.67.81/health
 
 
 
+## Terminología Kubernetes — diferencia entre los términos
+
+```
+CLUSTER
+└── NODO (máquina física/virtual)
+    └── POD (unidad mínima de Kubernetes)
+        └── CONTAINER (proceso Docker dentro del pod)
+
+DEPLOYMENT → controla y gestiona Pods
+SERVICE    → expone los Pods a la red
+```
+
+### Explicado simple
+
+| Término | Qué es | Analogía |
+|---|---|---|
+| **Cluster** | El conjunto completo de máquinas que administra Kubernetes | El edificio entero |
+| **Nodo** | Una máquina dentro del cluster (VM en GCP) | Un piso del edificio |
+| **Pod** | La unidad mínima donde corren containers | Un apartamento |
+| **Container** | El proceso Docker dentro del pod | Una habitación |
+| **Deployment** | El "administrador" que garantiza que tus pods estén corriendo y los reinicia si fallan | El administrador del edificio |
+| **Service** | La dirección fija para llegar a un pod (los pods cambian de IP, el Service no) | La dirección postal fija |
+
+---
+
+## ¿Cómo referirte a cada cosa?
+
+Cuando dices *"voy a crear el grpc-server"* técnicamente estás creando:
+- 1 **Deployment** (que gestiona el pod)
+- 1 **Service** (para que otros lo encuentren)
+- El Deployment crea 1 **Pod** con 1 **Container** adentro
+
+---
+
+## RabbitMQ — ¿Pod, Deployment o qué?
+
+Para RabbitMQ en este proyecto usas un **Deployment + Service**, igual que los demás. No necesitas nada especial. La diferencia con los otros es que RabbitMQ necesita persistencia de datos, pero para este proyecto académico no es crítico.
+
+```yaml
+# Lo que necesitas para RabbitMQ:
+Deployment → 1 pod → 1 container (imagen: rabbitmq:3-management)
+Service    → expone puerto 5672 (AMQP) internamente al cluster
+```
+
+---
+
+## Plan actual confirmado
+
+```
+✅ rust-api     → Deployment + Service (hecho)
+✅ go-service   → Deployment + Service (hecho, en CrashLoop esperando grpc)
+🔜 rabbitmq     → Deployment + Service  ← primero
+🔜 grpc-server  → Deployment + Service  ← segundo (necesita rabbitmq)
+⏳ consumer     → después
+⏳ valkey       → después
+```
+
+RabbitMQ va primero porque el grpc-server lo necesita para arrancar. ¿Arrancamos con el manifest de RabbitMQ?

@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-deploy
+  namespace: mumnk8s
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-service
+  template:
+    metadata:
+      labels:
+        app: go-service
+    spec:
+      containers:
+        - name: go-service
+          image: curtly-duress-exciting.ngrok-free.dev/go-service:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8081
+          env:
+            # Apunta al Service del grpc-server (Deployment 2, se hará después)
+            - name: GRPC_SERVER_URL
+              value: "grpc-server-svc.mumnk8s.svc.cluster.local:50051"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "300m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 15
