@@ -1230,3 +1230,89 @@ Importar el archivo json que esta en el proyecto en la ruta: 201504070_LAB_SO1_1
 </div>
 
 ---
+
+## Ejecutar Locust (generador de carga)
+
+# 1. Entras a la carpeta donde vive el locustfile.py
+
+```sh
+cd 201504070_LAB_SO1_1S2026/Proyecto3/Locus/
+```
+
+# Ejecutar el contenedor mapeando el directorio actual (.)
+
+```sh
+docker run -d -p 8089:8089 \
+  -v $PWD:/mnt/locust \
+  locustio/locust \
+  -f /mnt/locust/locustfile.py
+```
+
+Ver si está corriendo:
+```sh
+docker ps
+```
+
+Ver los logs (útil para ver si Locust inició bien):
+```sh
+docker logs -f locust-service
+```
+
+Detener el test:
+```sh
+docker stop locust-service
+docker rm locust-service
+```
+
+Volver a iniciarlo:
+```sh
+docker start locust-service
+```
+
+<div align="center">
+  <img src="img/42.jpg" alt="" width="100%">
+</div>
+
+---
+
+## Pruebas con locus
+
+Abrir en el navegador:
+
+```url
+http://localhost:8089/
+```
+
+<div align="center">
+  <img src="img/43.jpg" alt="" width="100%">
+</div>
+
+> Colocar en host la url de la api gateway en este caso http://34.117.67.81
+
+---
+
+<br />
+
+<div align="center">
+  <img src="img/44.jpg" alt="" width="100%">
+</div>
+
+---
+
+## Urls finales
+
+Host de api rust
+```url
+http://34.117.67.81/grpc-201504070
+```
+
+Grafana
+```url
+http://34.9.24.18:32000/
+```
+
+Locust
+
+```url
+http://localhost:8089/
+```
