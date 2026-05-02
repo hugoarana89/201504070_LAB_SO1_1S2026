@@ -659,76 +659,19 @@ kubectl describe pod rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
 
 ---
 
+## Levantar el consumer
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Ya estás muy cerca — el problema es sencillo pero clásico 👀
-
-👉 Tu pod **NO está en el namespace `default`**, está en:
-
-```
-mumnk8s
-```
-
-Por eso Kubernetes te dice `NotFound`.
-
----
-
-## ✅ Solución correcta
-
-Debes especificar el namespace con `-n`:
+El consumer necesita tanto RabbitMQ como Valkey para arrancar — si Valkey no existe crasheará igual que el go-service, en kubernets entrará en CrashLoopBackOff hasta que Valkey esté levantado.
 
 ```bash
-kubectl logs rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+cd 201504070_LAB_SO1_1S2026/Proyecto3/k8s/parte4
 ```
-
----
-
-## 🧠 Por qué pasa esto
-
-Cuando ejecutas:
 
 ```bash
-kubectl logs <pod>
+kubectl apply -f 14-deployment-consumer.yaml  # crasheará hasta tener Valkey
 ```
 
-Kubernetes asume:
-
-```
-namespace = default
-```
-
-Pero tu pod está en:
-
-```
-mumnk8s
-```
-
----
-
-## 🔥 Comandos útiles para evitar este problema
-
-### Ver pods SOLO de ese namespace
+### Ver pods
 
 ```bash
 kubectl get pods -n mumnk8s
@@ -739,7 +682,7 @@ kubectl get pods -n mumnk8s
 ### Ver logs en tiempo real
 
 ```bash
-kubectl logs -f rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+kubectl logs -f consumer-deploy-dc699b746-l8vhs -n mumnk8s
 ```
 
 ---
@@ -747,258 +690,543 @@ kubectl logs -f rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
 ### Describir el pod (MUY recomendado ahora)
 
 ```bash
-kubectl describe pod rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+kubectl describe pod consumer-deploy-dc699b746-l8vhs -n mumnk8s
 ```
 
 ---
 
-### (Opcional) Cambiar namespace por defecto
+## Levantar valkey en una maquina virtual
 
-Así ya no tienes que poner `-n` siempre:
+**Requisitos previos:**
+- Cluster GKE creado con suficientes recursos
+- KubeVirt instalado y todos los pods en `Running`
+- `virtctl` instalado***
+
+---
+
+### Instalar KubeVirt
 
 ```bash
-kubectl config set-context --current --namespace=mumnk8s
+# Instalar el operador
+kubectl apply -f https://github.com/kubevirt/kubevirt/releases/download/v1.7.2/kubevirt-operator.yaml
+
+# Parchear para GKE (quita restricciones de nodos maestros)
+kubectl patch deployment virt-operator -n kubevirt --type="json" \
+  -p='[{"op": "remove", "path": "/spec/template/spec/affinity"}, {"op": "remove", "path": "/spec/template/spec/tolerations"}]'
+
+# Instalar KubeVirt con emulación por software (necesario en GKE)
+
+# Estar en la ruta 
+
+cd 201504070_LAB_SO1_1S2026/Proyecto3/k8s/parte5
+
+kubectl apply -f 15-emul-kubevirt.yaml 
+
+# Esperar que todos los pods estén Running
+kubectl get pods -n kubevirt -w
+```
+
+<div align="center">
+  <img src="img/25.jpg" alt="" width="100%">
+</div>
+
+---
+
+### Instalar virtctl 
+
+> si ya se tiene instalado dará error, para arreglarlo solo se debe borrar virtctl y volver a instalarlo
+
+sudo rm /usr/local/bin/virtctl
+
+```bash
+VERSION=$(kubectl get kubevirt.kubevirt.io/kubevirt -n kubevirt -o=jsonpath="{.status.observedKubeVirtVersion}")
+ARCH=$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/amd64/')
+curl -L -o virtctl https://github.com/kubevirt/kubevirt/releases/download/${VERSION}/virtctl-${VERSION}-${ARCH}
+chmod +x virtctl
+sudo mv virtctl /usr/local/bin/
+```
+
+<div align="center">
+  <img src="img/26.jpg" alt="" width="100%">
+</div>
+
+---
+
+### Crear la VM Alpine para Valkey
+
+```bash
+# Estar en la ruta
+cd 201504070_LAB_SO1_1S2026/Proyecto3/k8s/parte5
+kubectl apply -f 16-valkey-vm.yaml
+```
+
+Monitorear hasta que esté `Running`:
+```bash
+kubectl get vmi valkey-vm -n mumnk8s -w
+```
+
+### Service ClusterIP para Valkey
+
+> A diferencia de Grafana que usa NodePort (acceso externo),
+> Valkey solo necesita ClusterIP porque solo lo acceden pods y VMs internamente.
+
+**valkey-vm-svc.yaml** (kubectl apply -f)
+
+```bash
+# Estar en la ruta
+cd 201504070_LAB_SO1_1S2026/Proyecto3/k8s/parte5
+kubectl apply -f 17-valkey-vm-svc.yaml
 ```
 
 ---
 
-## 🚨 Siguiente paso
-
-Ejecuta:
+### Entrar a la VM e instalar Valkey
 
 ```bash
-kubectl logs rust-api-deploy-847fc7d7bd-tmjxl -n mumnk8s
+virtctl console valkey-vm -n mumnk8s
+# usuario: root (sin contraseña)
 ```
+---
 
-Y pégame el resultado.
-Ahí ya vamos a ver **por qué tu app “no funciona” realmente** 👍
+### Configuración inicial dentro de la VM
 
+```sh
+# 1. Levantar red (necesario en cada reinicio)
+ip link set eth0 up && udhcpc -i eth0
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Comandos útiles
-
-### Volver a construir los pods
-
-```bash
-kubectl rollout status deployment rust-api-deploy -n mumnk8s
-```
-
-### Ver los logs de los pods por si fallan 
-```bash
-kubectl describe httproute api-route -n mumnk8s
+# 2. Levantar loopback (necesario para valkey-cli)
+ip link set lo up
 ```
 
 ---
 
-## Diagnóstico de problemas con Gateway y Load Balancer
+### Preparar disco adicional (solo la primera vez)
 
-Se presenta un escenario donde el Pod se encuentra en estado `Running` y el Gateway ya posee una IP pública asignada, pero las solicitudes realizadas con `curl` fallan.
-
-En este caso, se deben considerar dos factores principales:
-
-### 1. Tiempo de propagación del Load Balancer
-
-El Gateway en GKE depende de un Load Balancer externo que puede tardar algunos minutos en configurarse completamente.
-Aunque el Gateway muestre el estado `Programmed: True`, esto no garantiza que el tráfico ya esté siendo enrutado correctamente.
-
----
-
-### 2. Verificación del HTTPRoute
-
-Es necesario inspeccionar la configuración del recurso `HTTPRoute`:
-
-```bash
-kubectl describe httproute api-route -n mumnk8s
-```
-
-Un problema común ocurre cuando los nombres no coinciden entre el `Service` y el `HTTPRoute`.
-Por ejemplo, si el `HTTPRoute` apunta a:
-
-```yaml
-api-rust-service
-```
-
-pero el `Service` real se llama:
-
-```yaml
-rust-api-service
-```
-
-esto provocará que el Gateway no pueda enrutar correctamente las solicitudes.
-
-Para validar los servicios disponibles:
-
-```bash
-kubectl get svc -n mumnk8s
-```
-
-También es recomendable verificar el estado del `HTTPRoute`:
-
-```bash
-kubectl get httproute -n mumnk8s
+```sh
+mkdosfs -F 32 /dev/vdb
+mkdir -p /mnt/data
+mount /dev/vdb /mnt/data
 ```
 
 ---
 
-## Validación de la aplicación sin Gateway
+### Instalar y compilar Valkey desde código fuente
 
-Para confirmar que la aplicación funciona correctamente de forma interna, se puede realizar un `port-forward`:
+```sh
 
-```bash
-kubectl port-forward pod/rust-api-deploy-847fc7d7bd-tmjxl 8080:8080 -n mumnk8s
+set -e
+
+# Dependencias necesarias
+apk add --no-cache build-base git linux-headers tar curl
+
+# Descargar código fuente
+cd /tmp
+curl -L https://github.com/valkey-io/valkey/archive/refs/tags/9.0.3.tar.gz -o valkey.tar.gz
+tar -xzf valkey.tar.gz
+cd valkey-9.0.3
+
+# Verificar ubicación
+ls
 ```
-
-En otra terminal:
-
-```bash
-curl http://localhost:8080/health
-```
-
-Si esta prueba responde correctamente, se concluye que la aplicación está funcionando y el problema se limita al enrutamiento del Gateway.
 
 ---
 
-## Problema de "no healthy upstream"
+### Compilación
 
-Cuando se recibe el mensaje:
+```sh
+# Compilación compatible con Alpine antiguo y CPU emulada
+make MALLOC=libc BUILD_TLS=no
+```
+
+> ⏱️ Este proceso puede tardar bastante (hasta ~1 hora en entornos emulados).
+> No interrumpir mientras aparezcan líneas con `CC`.
+
+---
+
+### Instalación de binarios
+
+```sh
+install -m 755 src/valkey-server /usr/local/bin/valkey-server
+install -m 755 src/valkey-cli /usr/local/bin/valkey-cli
+```
+Si lo anterior da error entonces copiar manualmente (SOLO SI LO ANTERIOR FALLA):
+
+```sh
+cp src/valkey-server /usr/local/bin/
+cp src/valkey-cli /usr/local/bin/
+chmod +x /usr/local/bin/valkey-*
+```
+
+---
+
+### Ejecución de Valkey
+
+```sh
+valkey-server \
+  --bind 0.0.0.0 \
+  --port 6379 \
+  --dir /mnt/data \
+  --save "" \
+  --protected-mode no \
+  --daemonize yes
+```
+
+---
+
+### Verificación
+
+```sh
+# Verificar puerto
+netstat -tlnp | grep 6379
+
+# Probar conexión
+valkey-cli ping
+```
+
+Resultado esperado:
 
 ```text
-no healthy upstream
+PONG
 ```
-
-esto indica que el Load Balancer de GCP no reconoce ningún backend como saludable.
-
-### Causa principal
-
-El Load Balancer realiza verificaciones de salud (health checks) automáticamente hacia la ruta raíz:
-
-```http
-GET /
-```
-
-Si la aplicación no tiene un endpoint que responda con código **200 OK** en `/`, el backend será marcado como no saludable.
-
-Aunque exista un endpoint como:
-
-```http
-/health
-```
-
-este no será utilizado por defecto por el Load Balancer.
 
 ---
 
-## Verificación del estado del Gateway
+## ⚠️ Importante (persistencia tras reinicio)
 
-Para inspeccionar el estado del Gateway y sus condiciones:
+Cada vez que la VM reinicia, se debe levantar la interfaz loopback:
+
+```sh
+ip link set lo up
+```
+
+---
+
+### Automatizar loopback (opcional)
+
+```sh
+echo "ip link set lo up" >> /etc/local.d/network.start
+chmod +x /etc/local.d/network.start
+rc-update add local
+```
+
+### 🧠 Mejora importante que recomendada agregar
+
+Esto evita warnings y problemas futuros:
+
+```sh
+sysctl -w vm.overcommit_memory=1
+```
+
+### Para salir
+
+Salir de la consola: `Ctrl + ]`
+
+---
+
+<div align="center">
+  <img src="img/28.jpg" alt="" width="100%">
+</div>
+
+<br />
+
+---
+
+<div align="center">
+  <img src="img/27.jpg" alt="" width="100%">
+</div>
+
+---
+
+## Forzar a reiniciar a consumer
+
+```sh
+kubectl rollout restart deployment/consumer-deploy -n mumnk8s
+```
+
+Verificar que todos los pods están Running
+
+```sh
+kubectl get pods -n mumnk8s
+```
+
+<div align="center">
+  <img src="img/29.jpg" alt="" width="100%">
+</div>
+
+---
+
+## Comandos para verificar logs e ingreso de datos en valkey
+
+### 1. Ver si rust-api recibió la petición
+```sh
+kubectl logs -n mumnk8s deployment/rust-api-deploy
+```
+
+### 2. Ver si go-service recibió de rust y mandó por gRPC
+```sh
+kubectl logs -n mumnk8s deployment/go-deploy
+```
+
+### 3. Ver si grpc-server recibió y publicó a RabbitMQ
+```sh
+kubectl logs -n mumnk8s deployment/grpc-server-deploy
+```
+
+### 4. Ver si consumer está leyendo de RabbitMQ
+```sh
+kubectl logs -n mumnk8s deployment/consumer-deploy
+```
+
+### 5. Ver datos ingresados en valkey
+
+```sh
+kubectl run test-valkey --rm -it \
+  --image=redis:7 \
+  -n mumnk8s \
+  -- redis-cli -h valkey-vm-svc.mumnk8s.svc.cluster.local -p 6379
+```
+> Mantener presionado enter hasta que salga: valkey-vm-svc.mumnk8s.svc.cluster.local:6379>
+
+Ver todas las keys almacenadas
+```sh
+KEYS *
+```
+
+Ver cuántas keys hay en total
+```sh
+DBSIZE
+```
+
+<div align="center">
+  <img src="img/30.jpg" alt="" width="100%">
+</div>
+
+---
+
+## Instalar grafana
+
+### Ir a la ruta:
+
+```sh
+cd "201504070_LAB_SO1_1S2026/Proyecto3/k8s/parte6"
+```
+
+### Crear maquina virtual para grafana
+
+```sh
+kubectl apply -f 18-grafana-vm.yaml
+```
+
+### Exponer Grafana con NodePort
+
+```sh
+kubectl apply -f 19-grafana-vm-svc.yaml
+```
+
+### Entrar a la maquina virtual de grafana
+
+```sh
+virtctl console grafana-vm -n mumnk8s
+# usuario: root (sin contraseña)
+```
+### Levantar red (necesario cada vez que reinicia la VM)
+
+```sh
+ip link set eth0 up && udhcpc -i eth0
+```
+
+### Formatear el disco extra de 5GB (solo la primera vez)
+
+```sh
+mkdosfs -F 32 /dev/vdb
+mkdir -p /mnt/data
+mount /dev/vdb /mnt/data
+```
+
+### Descargar Grafana al disco extra
+
+```sh
+wget https://dl.grafana.com/oss/release/grafana-11.5.0.linux-amd64.tar.gz -O /mnt/data/grafana.tar.gz
+```
+
+### Extraer
+```sh
+tar -zxvf /mnt/data/grafana.tar.gz -C /mnt/data/
+```
+
+### Crear directorios de datos
+
+```sh
+mkdir -p /mnt/data/grafana-data /mnt/data/grafana-logs /mnt/data/grafana-plugins
+```
+
+### Arrancar Grafana
+```sh
+/mnt/data/grafana-v11.5.0/bin/grafana-server \
+  --homepath /mnt/data/grafana-v11.5.0 \
+  cfg:default.paths.data=/mnt/data/grafana-data \
+  cfg:default.paths.logs=/mnt/data/grafana-logs \
+  cfg:default.paths.plugins=/mnt/data/grafana-plugins &
+```
+
+> Mostrará el output de ejecución después solo precionar enter
+
+
+### Verificar que corre en el puerto 3000
+
+```sh
+netstat -tlnp | grep 3000
+```
+
+Salir de la consola: `Ctrl + ]`
+
+---
+
+<div align="center">
+  <img src="img/31.jpg" alt="" width="100%">
+</div>
+
+---
+
+> **Nota:** El disco `/dev/vdb` (FAT32) y la red se pierden al reiniciar la VM. Ejecutar los pasos 1 y 2 del mount + red cada vez que reinicies, y el paso 6 para volver a arrancar Grafana.
+
+---
+
+### Verificar los endpoints de grafana
 
 ```bash
-kubectl describe gateway api-gateway -n mumnk8s | grep -A 20 "Status"
+kubectl describe svc grafana-vm-svc -n mumnk8s | grep Endpoints
+# Debe mostrar: Endpoints: <IP>:3000
 ```
 
 ---
 
-## Verificación de backends en GCP
-
-Se puede comprobar si existen configuraciones adicionales como `BackendPolicy`:
+### Abrir el firewall en GCP
 
 ```bash
-kubectl get backendpolicy -n mumnk8s 2>/dev/null || echo "no backendpolicy"
+gcloud compute firewall-rules create grafana-nodeport \
+  --allow tcp:32000 \
+  --source-ranges 0.0.0.0/0 \
+  --description "Grafana NodePort"
 ```
 
-Y listar los servicios backend del Load Balancer:
+---
 
+<div align="center">
+  <img src="img/32.jpg" alt="" width="100%">
+</div>
+
+---
+
+### Acceder a Grafana
+
+Obténer la IP externa de cualquier nodo:
 ```bash
-gcloud compute backend-services list --global
+kubectl get nodes -o wide
+# Columna EXTERNAL-IP
 ```
+
+Abrir en el navegador:
+
+```text
+http://<EXTERNAL-IP>:32000
+ejp:
+http://34.9.24.18:32000/
+```
+
+<div align="center">
+  <img src="img/33.jpg" alt="" width="100%">
+</div>
+
+> El cluster tiene 2 nodos (2 máquinas virtuales en GCP). Ambas IPs son válidas para acceder a Grafana con NodePort — Kubernetes enruta el tráfico correctamente desde  cualquiera de los dos nodos.
 
 ---
 
-## Prueba detallada con curl
+## Configurar grafana
 
-Para obtener más información sobre la respuesta del servidor:
+### Logearse en grafana con
 
-```bash
-curl -v http://34.117.67.81/health
+```text
+Usuario: admin
+Password: admin
 ```
+
+> Grafana pedirá cambiar la contraseña por default
+
+### Añadir el datasource
+
+En el home de grafana ir a Connections > Add new connection y en el buscador ingresar "redis", dar en instalar y luego en Add new data source.
+
+<div align="center">
+  <img src="img/34.jpg" alt="" width="100%">
+</div>
 
 ---
 
+Luego en configuración de datasource colocar:
 
-
-
-
-
-
-## Terminología Kubernetes — diferencia entre los términos
-
-```
-CLUSTER
-└── NODO (máquina física/virtual)
-    └── POD (unidad mínima de Kubernetes)
-        └── CONTAINER (proceso Docker dentro del pod)
-
-DEPLOYMENT → controla y gestiona Pods
-SERVICE    → expone los Pods a la red
+```text
+Type: Standalon
+Adress: redis://valkey-vm-svc.mumnk8s.svc.cluster.local:6379
 ```
 
-### Explicado simple
+Dar click en save y test
 
-| Término | Qué es | Analogía |
-|---|---|---|
-| **Cluster** | El conjunto completo de máquinas que administra Kubernetes | El edificio entero |
-| **Nodo** | Una máquina dentro del cluster (VM en GCP) | Un piso del edificio |
-| **Pod** | La unidad mínima donde corren containers | Un apartamento |
-| **Container** | El proceso Docker dentro del pod | Una habitación |
-| **Deployment** | El "administrador" que garantiza que tus pods estén corriendo y los reinicia si fallan | El administrador del edificio |
-| **Service** | La dirección fija para llegar a un pod (los pods cambian de IP, el Service no) | La dirección postal fija |
+<div align="center">
+  <img src="img/38.jpg" alt="" width="100%">
+</div>
 
 ---
 
-## ¿Cómo referirte a cada cosa?
+### Añadir dashboard
 
-Cuando dices *"voy a crear el grpc-server"* técnicamente estás creando:
-- 1 **Deployment** (que gestiona el pod)
-- 1 **Service** (para que otros lo encuentren)
-- El Deployment crea 1 **Pod** con 1 **Container** adentro
+Ir a Dahboards > New dashboard
+
+<div align="center">
+  <img src="img/35.jpg" alt="" width="100%">
+</div>
+
+### Importar el dashboard
+
+Importar el archivo json que esta en el proyecto en la ruta: 201504070_LAB_SO1_1S2026 > grafana > provisioning > dashboards > sopes-dashboard.json
+
+<div align="center">
+  <img src="img/36.jpg" alt="" width="100%">
+</div>
+
+---
+<br />
+
+<div align="center">
+  <img src="img/37.jpg" alt="" width="100%">
+</div>
 
 ---
 
-## RabbitMQ — ¿Pod, Deployment o qué?
+### Configurar nuevo datasource en las gráficas
 
-Para RabbitMQ en este proyecto usas un **Deployment + Service**, igual que los demás. No necesitas nada especial. La diferencia con los otros es que RabbitMQ necesita persistencia de datos, pero para este proyecto académico no es crítico.
+- El json viene con el id del datasource de una instalación antigua por lo que se debe de cambiar.
 
-```yaml
-# Lo que necesitas para RabbitMQ:
-Deployment → 1 pod → 1 container (imagen: rabbitmq:3-management)
-Service    → expone puerto 5672 (AMQP) internamente al cluster
-```
+- En cada una de las graficas hacer click en los 3 puntos y luego en editar.
+
+<div align="center">
+  <img src="img/39.jpg" alt="" width="100%">
+</div>
 
 ---
 
-## Plan actual confirmado
+- Simplemente al dar click en el label de datasource y elegir redis-datasource el id del datasource se actualizará por el nuevo.
 
-```
-✅ rust-api     → Deployment + Service (hecho)
-✅ go-service   → Deployment + Service (hecho, en CrashLoop esperando grpc)
-🔜 rabbitmq     → Deployment + Service  ← primero
-🔜 grpc-server  → Deployment + Service  ← segundo (necesita rabbitmq)
-⏳ consumer     → después
-⏳ valkey       → después
-```
+<div align="center">
+  <img src="img/40.jpg" alt="" width="100%">
+</div>
 
-RabbitMQ va primero porque el grpc-server lo necesita para arrancar. ¿Arrancamos con el manifest de RabbitMQ?
+---
+
+> Hacer lo mismo para todas las gráficas
+
+<div align="center">
+  <img src="img/41.jpg" alt="" width="100%">
+</div>
+
+---

@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer-deploy
+  namespace: mumnk8s
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consumer
+  template:
+    metadata:
+      labels:
+        app: consumer
+    spec:
+      containers:
+        - name: consumer
+          image: curtly-duress-exciting.ngrok-free.dev/consumer:v1
+          imagePullPolicy: Always
+          env:
+            - name: RABBITMQ_URL
+              value: "amqp://guest:guest@rabbitmq-svc.mumnk8s.svc.cluster.local:5672/"
+            - name: QUEUE_NAME
+              value: "war_reports"
+            - name: VALKEY_ADDR
+              value: "valkey-vm-svc.mumnk8s.svc.cluster.local:6379"
+            - name: VALKEY_PASSWORD
+              value: ""
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "300m"
+              memory: "128Mi"
