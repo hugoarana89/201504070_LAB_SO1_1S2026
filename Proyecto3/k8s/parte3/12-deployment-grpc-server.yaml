@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpc-server-deploy
+  namespace: mumnk8s
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-server
+  template:
+    metadata:
+      labels:
+        app: grpc-server
+    spec:
+      containers:
+        - name: grpc-server
+          image: curtly-duress-exciting.ngrok-free.dev/grpc-server:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 50051
+          env:
+            # Apunta al Service de RabbitMQ dentro del cluster
+            - name: RABBITMQ_URL
+              value: "amqp://guest:guest@rabbitmq-svc.mumnk8s.svc.cluster.local:5672/"
+            - name: QUEUE_NAME
+              value: "war_reports"
+            - name: GRPC_PORT
+              value: "50051"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "300m"
+              memory: "128Mi"

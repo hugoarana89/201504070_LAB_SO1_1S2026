@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey-vm-svc
+  namespace: mumnk8s
+spec:
+  type: ClusterIP
+  selector:
+    vm.kubevirt.io/name: valkey-vm
+  ports:
+    - name: valkey
+      protocol: TCP
+      port: 6379
+      targetPort: 6379

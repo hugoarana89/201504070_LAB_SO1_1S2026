@@ -1,0 +1,52 @@
+para ejecutar con python:
+
+En windows:
+
+python -m venv .venv   
+.venv\Scripts\activate
+
+python3 -m pip install --upgrade pip
+pip install locust
+
+Para verificar:
+
+locust --version
+
+
+En linux:
+
+sudo apt upadate
+sudo apt install python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
+
+python3 -m pip install --upgrade pip
+pip install locust
+
+Para verificar:
+
+locust --version
+
+En docker:
+
+# 1. Entras a la carpeta donde vive el locustfile.py
+cd 201504070_LAB_SO1_1S2026/Proyecto3/Locus/
+
+# 2. Ejecutar el contenedor mapeando el directorio actual (.)
+
+docker run -d -p 8089:8089 \
+  -v $PWD:/mnt/locust \
+  locustio/locust \
+  -f /mnt/locust/locustfile.py
+
+Ver si está corriendo:
+docker ps
+
+Ver los logs (útil para ver si Locust inició bien):
+docker logs -f locust-service
+
+Detener el test:
+docker stop locust-service
+
+Volver a iniciarlo:
+docker start locust-service
