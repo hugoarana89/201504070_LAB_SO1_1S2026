@@ -1233,7 +1233,7 @@ Importar el archivo json que esta en el proyecto en la ruta: 201504070_LAB_SO1_1
 
 ## Ejecutar Locust (generador de carga)
 
-# 1. Entras a la carpeta donde vive el locustfile.py
+# 1. Entrar a la carpeta donde vive el locustfile.py
 
 ```sh
 cd 201504070_LAB_SO1_1S2026/Proyecto3/Locus/
@@ -1315,4 +1315,31 @@ Locust
 
 ```url
 http://localhost:8089/
+```
+
+## Borrar todo
+
+Para borrar todo limpiamente:
+
+**1. Eliminar el clúster GKE** (esto borra todos los pods, deployments, services, etc.):
+```bash
+gcloud container clusters delete mumnk8s-cluster --zone us-central1-a
+```
+Pedirá confirmación, escribot `Y`.
+
+**2. Verificar que no quedaron Load Balancers huérfanos** (el Gateway crea uno en GCP):
+
+```bash
+gcloud compute forwarding-rules list
+gcloud compute backend-services list
+```
+
+Si aparece algo relacionado con `mumnk8s`, bórrarlo con:
+```bash
+gcloud compute forwarding-rules delete NOMBRE --global
+```
+
+**3. Verificar que no quedaron discos huérfanos:**
+```bash
+gcloud compute disks list
 ```
